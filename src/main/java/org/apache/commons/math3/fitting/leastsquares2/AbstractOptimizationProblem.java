@@ -14,11 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.commons.math3.optim;
+package org.apache.commons.math3.fitting.leastsquares2;
 
 import org.apache.commons.math3.exception.TooManyEvaluationsException;
 import org.apache.commons.math3.exception.TooManyIterationsException;
-import org.apache.commons.math3.fitting.leastsquares.OptimizationProblem;
+import org.apache.commons.math3.fitting.leastsquares2.OptimizationProblem;
+import org.apache.commons.math3.optim.ConvergenceChecker;
 import org.apache.commons.math3.util.Incrementor;
 
 /**

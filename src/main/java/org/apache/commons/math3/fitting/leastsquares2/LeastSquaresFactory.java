@@ -1,8 +1,8 @@
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
 import org.apache.commons.math3.analysis.MultivariateMatrixFunction;
 import org.apache.commons.math3.analysis.MultivariateVectorFunction;
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem.Evaluation;
+import org.apache.commons.math3.fitting.leastsquares2.LeastSquaresProblem.Evaluation;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DiagonalMatrix;
@@ -27,7 +27,7 @@ public class LeastSquaresFactory {
     }
 
      /**
-     * Create a {@link org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem}
+     * Create a {@link LeastSquaresProblem}
      * from the given elements. There will be no weights applied (Identity weights).
      *
      * @param model          the model function. Produces the computed values.
@@ -55,7 +55,7 @@ public class LeastSquaresFactory {
     }
 
     /**
-     * Create a {@link org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem}
+     * Create a {@link LeastSquaresProblem}
      * from the given elements.
      *
      * @param model          the model function. Produces the computed values.
@@ -87,7 +87,7 @@ public class LeastSquaresFactory {
     }
 
     /**
-     * Create a {@link org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem}
+     * Create a {@link LeastSquaresProblem}
      * from the given elements.
      * <p/>
      * This factory method is provided for continuity with previous interfaces. Newer

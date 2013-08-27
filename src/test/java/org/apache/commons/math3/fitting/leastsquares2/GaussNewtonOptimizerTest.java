@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
 import org.apache.commons.math3.exception.ConvergenceException;
 import org.apache.commons.math3.exception.TooManyEvaluationsException;
-import org.apache.commons.math3.fitting.leastsquares.GaussNewtonOptimizer.Decomposition;
+import org.apache.commons.math3.fitting.leastsquares2.GaussNewtonOptimizer.Decomposition;
 import org.apache.commons.math3.optim.SimpleVectorValueChecker;
 import org.junit.Test;
 

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
 import java.util.ArrayList;
 import org.apache.commons.math3.analysis.MultivariateVectorFunction;

@@ -1,4 +1,4 @@
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
 import org.apache.commons.math3.optim.ConvergenceChecker;
 import org.apache.commons.math3.util.Incrementor;

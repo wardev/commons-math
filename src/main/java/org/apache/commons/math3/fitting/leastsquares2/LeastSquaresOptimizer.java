@@ -1,6 +1,6 @@
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem.Evaluation;
+import org.apache.commons.math3.fitting.leastsquares2.LeastSquaresProblem.Evaluation;
 
 /**
  * An algorithm that can be applied to a non-linear least squares problem.

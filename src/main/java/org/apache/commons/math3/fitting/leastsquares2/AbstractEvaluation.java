@@ -1,6 +1,6 @@
-package org.apache.commons.math3.fitting.leastsquares;
+package org.apache.commons.math3.fitting.leastsquares2;
 
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem.Evaluation;
+import org.apache.commons.math3.fitting.leastsquares2.LeastSquaresProblem.Evaluation;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DecompositionSolver;
 import org.apache.commons.math3.linear.QRDecomposition;
@@ -51,7 +51,7 @@ abstract class AbstractEvaluation implements Evaluation {
         final int nC = cov.getColumnDimension();
         final RealVector sig = new ArrayRealVector(nC);
         for (int i = 0; i < nC; ++i) {
-            sig.setEntry(i, FastMath.sqrt(cov.getEntry(i,i)));
+            sig.setEntry(i, FastMath.sqrt(cov.getEntry(i, i)));
         }
         return sig;
     }
