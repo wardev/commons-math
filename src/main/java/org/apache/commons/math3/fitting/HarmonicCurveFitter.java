@@ -16,166 +16,220 @@
  */
 package org.apache.commons.math3.fitting;
 
-import org.apache.commons.math3.optim.nonlinear.vector.MultivariateVectorOptimizer;
+import java.util.Collection;
+import java.util.List;
+import java.util.ArrayList;
 import org.apache.commons.math3.analysis.function.HarmonicOscillator;
 import org.apache.commons.math3.exception.ZeroException;
 import org.apache.commons.math3.exception.NumberIsTooSmallException;
 import org.apache.commons.math3.exception.MathIllegalStateException;
 import org.apache.commons.math3.exception.util.LocalizedFormats;
+import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.WithStartPoint;
+import org.apache.commons.math3.fitting.leastsquares.WithMaxIterations;
+import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.util.FastMath;
 
 /**
- * Class that implements a curve fitting specialized for sinusoids.
+ * Fits points to a {@link
+ * org.apache.commons.math3.analysis.function.HarmonicOscillator.Parametric harmonic oscillator}
+ * function.
+ * <br/>
+ * The {@link #withStartPoint(double[]) initial guess values} must be passed
+ * in the following order:
+ * <ul>
+ *  <li>Amplitude</li>
+ *  <li>Angular frequency</li>
+ *  <li>phase</li>
+ * </ul>
+ * The optimal values will be returned in the same order.
  *
- * Harmonic fitting is a very simple case of curve fitting. The
- * estimated coefficients are the amplitude a, the pulsation &omega; and
- * the phase &phi;: <code>f (t) = a cos (&omega; t + &phi;)</code>. They are
- * searched by a least square estimator initialized with a rough guess
- * based on integrals.
- *
- * @version $Id: HarmonicFitter.java 1416643 2012-12-03 19:37:14Z tn $
- * @since 2.0
- * @deprecated As of 3.3. Please use {@link HarmonicCurveFitter} and
- * {@link WeightedObservedPoints} instead.
+ * @version $Id$
+ * @since 3.3
  */
-@Deprecated
-public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
+public class HarmonicCurveFitter extends AbstractCurveFitter<LevenbergMarquardtOptimizer>
+    implements WithStartPoint<HarmonicCurveFitter>,
+               WithMaxIterations<HarmonicCurveFitter> {
+    /** Parametric function to be fitted. */
+    private static final HarmonicOscillator.Parametric FUNCTION = new HarmonicOscillator.Parametric();
+    /** Initial guess. */
+    private final double[] initialGuess;
+    /** Maximum number of iterations of the optimization algorithm. */
+    private final int maxIter;
+
     /**
-     * Simple constructor.
-     * @param optimizer Optimizer to use for the fitting.
+     * Contructor used by the factory methods.
+     *
+     * @param initialGuess Initial guess. If set to {@code null}, the initial guess
+     * will be estimated using the {@link ParameterGuesser}.
+     * @param maxIter Maximum number of iterations of the optimization algorithm.
      */
-    public HarmonicFitter(final MultivariateVectorOptimizer optimizer) {
-        super(optimizer);
+    private HarmonicCurveFitter(double[] initialGuess,
+                                int maxIter) {
+        this.initialGuess = initialGuess;
+        this.maxIter = maxIter;
     }
 
     /**
-     * Fit an harmonic function to the observed points.
+     * Creates a default curve fitter.
+     * The initial guess for the parameters will be {@link ParameterGuesser}
+     * computed automatically, and the maximum number of iterations of the
+     * optimization algorithm is set to {@link Integer#MAX_VALUE}.
      *
-     * @param initialGuess First guess values in the following order:
-     * <ul>
-     *  <li>Amplitude</li>
-     *  <li>Angular frequency</li>
-     *  <li>Phase</li>
-     * </ul>
-     * @return the parameters of the harmonic function that best fits the
-     * observed points (in the same order as above).
+     * @return a curve fitter.
+     *
+     * @see #withStartPoint(double[])
+     * @see #withMaxIterations(int)
      */
-    public double[] fit(double[] initialGuess) {
-        return fit(new HarmonicOscillator.Parametric(), initialGuess);
+    public static HarmonicCurveFitter create() {
+        return new HarmonicCurveFitter(null, Integer.MAX_VALUE);
     }
 
-    /**
-     * Fit an harmonic function to the observed points.
-     * An initial guess will be automatically computed.
-     *
-     * @return the parameters of the harmonic function that best fits the
-     * observed points (see the other {@link #fit(double[]) fit} method.
-     * @throws NumberIsTooSmallException if the sample is too short for the
-     * the first guess to be computed.
-     * @throws ZeroException if the first guess cannot be computed because
-     * the abscissa range is zero.
-     */
-    public double[] fit() {
-        return fit((new ParameterGuesser(getObservations())).guess());
+    /** {@inheritDoc} */
+    public HarmonicCurveFitter withStartPoint(double[] start) {
+        return new HarmonicCurveFitter(start.clone(),
+                                       maxIter);
+    }
+
+    /** {@inheritDoc} */
+    public HarmonicCurveFitter withMaxIterations(int max) {
+        return new HarmonicCurveFitter(initialGuess,
+                                       max);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected LevenbergMarquardtOptimizer getOptimizer(Collection<WeightedObservedPoint> observations) {
+        // Prepare least-squares problem.
+        final int len = observations.size();
+        final double[] target  = new double[len];
+        final double[] weights = new double[len];
+
+        int i = 0;
+        for (WeightedObservedPoint obs : observations) {
+            target[i]  = obs.getY();
+            weights[i] = obs.getWeight();
+            ++i;
+        }
+
+        final AbstractCurveFitter.TheoreticalValuesFunction model
+            = new AbstractCurveFitter.TheoreticalValuesFunction(FUNCTION,
+                                                                observations);
+
+        final double[] startPoint = initialGuess != null ?
+            initialGuess :
+            // Compute estimation.
+            new ParameterGuesser(observations).guess();
+
+        // Return a new optimizer set up to fit a Gaussian curve to the
+        // observed points.
+        return LevenbergMarquardtOptimizer.create()
+            .withMaxEvaluations(Integer.MAX_VALUE)
+            .withMaxIterations(maxIter)
+            .withStartPoint(startPoint)
+            .withTarget(target)
+            .withWeight(new DiagonalMatrix(weights))
+            .withModelAndJacobian(model.getModelFunction(),
+                                  model.getModelFunctionJacobian());
     }
 
     /**
      * This class guesses harmonic coefficients from a sample.
      * <p>The algorithm used to guess the coefficients is as follows:</p>
      *
-     * <p>We know f (t) at some sampling points t<sub>i</sub> and want to find a,
-     * &omega; and &phi; such that f (t) = a cos (&omega; t + &phi;).
+     * <p>We know \( f(t) \) at some sampling points \( t_i \) and want
+     * to find \( a \), \( \omega \) and \( \phi \) such that
+     * \( f(t) = a \cos (\omega t + \phi) \).
      * </p>
      *
      * <p>From the analytical expression, we can compute two primitives :
-     * <pre>
-     *     If2  (t) = &int; f<sup>2</sup>  = a<sup>2</sup> &times; [t + S (t)] / 2
-     *     If'2 (t) = &int; f'<sup>2</sup> = a<sup>2</sup> &omega;<sup>2</sup> &times; [t - S (t)] / 2
-     *     where S (t) = sin (2 (&omega; t + &phi;)) / (2 &omega;)
-     * </pre>
+     * \[
+     *     If2(t) = \int f^2 dt  = a^2 (t + S(t)) / 2
+     * \]
+     * \[
+     *     If'2(t) = \int f'^2 dt = a^2 \omega^2 (t - S(t)) / 2
+     * \]
+     * where \(S(t) = \frac{\sin(2 (\omega t + \phi))}{2\omega}\)
      * </p>
      *
-     * <p>We can remove S between these expressions :
-     * <pre>
-     *     If'2 (t) = a<sup>2</sup> &omega;<sup>2</sup> t - &omega;<sup>2</sup> If2 (t)
-     * </pre>
+     * <p>We can remove \(S\) between these expressions :
+     * \[
+     *     If'2(t) = a^2 \omega^2 t - \omega^2 If2(t)
+     * \]
      * </p>
      *
-     * <p>The preceding expression shows that If'2 (t) is a linear
-     * combination of both t and If2 (t): If'2 (t) = A &times; t + B &times; If2 (t)
+     * <p>The preceding expression shows that \(If'2 (t)\) is a linear
+     * combination of both \(t\) and \(If2(t)\):
+     * \[
+     *   If'2(t) = A t + B If2(t)
+     * \]
      * </p>
      *
      * <p>From the primitive, we can deduce the same form for definite
-     * integrals between t<sub>1</sub> and t<sub>i</sub> for each t<sub>i</sub> :
-     * <pre>
-     *   If2 (t<sub>i</sub>) - If2 (t<sub>1</sub>) = A &times; (t<sub>i</sub> - t<sub>1</sub>) + B &times; (If2 (t<sub>i</sub>) - If2 (t<sub>1</sub>))
-     * </pre>
+     * integrals between \(t_1\) and \(t_i\) for each \(t_i\) :
+     * \[
+     *   If2(t_i) - If2(t_1) = A (t_i - t_1) + B (If2 (t_i) - If2(t_1))
+     * \]
      * </p>
      *
-     * <p>We can find the coefficients A and B that best fit the sample
+     * <p>We can find the coefficients \(A\) and \(B\) that best fit the sample
      * to this linear expression by computing the definite integrals for
      * each sample points.
      * </p>
      *
-     * <p>For a bilinear expression z (x<sub>i</sub>, y<sub>i</sub>) = A &times; x<sub>i</sub> + B &times; y<sub>i</sub>, the
-     * coefficients A and B that minimize a least square criterion
-     * &sum; (z<sub>i</sub> - z (x<sub>i</sub>, y<sub>i</sub>))<sup>2</sup> are given by these expressions:</p>
-     * <pre>
+     * <p>For a bilinear expression \(z(x_i, y_i) = A x_i + B y_i\), the
+     * coefficients \(A\) and \(B\) that minimize a least-squares criterion
+     * \(\sum (z_i - z(x_i, y_i))^2\) are given by these expressions:</p>
+     * \[
+     *   A = \frac{\sum y_i y_i \sum x_i z_i - \sum x_i y_i \sum y_i z_i}
+     *            {\sum x_i x_i \sum y_i y_i - \sum x_i y_i \sum x_i y_i}
+     * \]
+     * \[
+     *   B = \frac{\sum x_i x_i \sum y_i z_i - \sum x_i y_i \sum x_i z_i}
+     *            {\sum x_i x_i \sum y_i y_i - \sum x_i y_i \sum x_i y_i}
      *
-     *         &sum;y<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>z<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;y<sub>i</sub>z<sub>i</sub>
-     *     A = ------------------------
-     *         &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>y<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>y<sub>i</sub>
+     * \]
      *
-     *         &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>z<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>z<sub>i</sub>
-     *     B = ------------------------
-     *         &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>y<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>y<sub>i</sub>
-     * </pre>
+     * <p>In fact, we can assume that both \(a\) and \(\omega\) are positive and
+     * compute them directly, knowing that \(A = a^2 \omega^2\) and that
+     * \(B = -\omega^2\). The complete algorithm is therefore:</p>
+     *
+     * For each \(t_i\) from \(t_1\) to \(t_{n-1}\), compute:
+     * \[ f(t_i) \]
+     * \[ f'(t_i) = \frac{f (t_{i+1}) - f(t_{i-1})}{t_{i+1} - t_{i-1}} \]
+     * \[ x_i = t_i  - t_1 \]
+     * \[ y_i = \int_{t_1}^{t_i} f^2(t) dt \]
+     * \[ z_i = \int_{t_1}^{t_i} f'^2(t) dt \]
+     * and update the sums:
+     * \[ \sum x_i x_i, \sum y_i y_i, \sum x_i y_i, \sum x_i z_i, \sum y_i z_i \]
+     *
+     * Then:
+     * \[
+     *  a = \sqrt{\frac{\sum y_i y_i  \sum x_i z_i - \sum x_i y_i \sum y_i z_i }
+     *                 {\sum x_i y_i  \sum x_i z_i - \sum x_i x_i \sum y_i z_i }}
+     * \]
+     * \[
+     *  \omega = \sqrt{\frac{\sum x_i y_i \sum x_i z_i - \sum x_i x_i \sum y_i z_i}
+     *                      {\sum x_i x_i \sum y_i y_i - \sum x_i y_i \sum x_i y_i}}
+     * \]
+     *
+     * <p>Once we know \(\omega\) we can compute:
+     * \[
+     *    fc = \omega f(t) \cos(\omega t) - f'(t) \sin(\omega t)
+     * \]
+     * \[
+     *    fs = \omega f(t) \sin(\omega t) + f'(t) \cos(\omega t)
+     * \]
      * </p>
      *
-     *
-     * <p>In fact, we can assume both a and &omega; are positive and
-     * compute them directly, knowing that A = a<sup>2</sup> &omega;<sup>2</sup> and that
-     * B = - &omega;<sup>2</sup>. The complete algorithm is therefore:</p>
-     * <pre>
-     *
-     * for each t<sub>i</sub> from t<sub>1</sub> to t<sub>n-1</sub>, compute:
-     *   f  (t<sub>i</sub>)
-     *   f' (t<sub>i</sub>) = (f (t<sub>i+1</sub>) - f(t<sub>i-1</sub>)) / (t<sub>i+1</sub> - t<sub>i-1</sub>)
-     *   x<sub>i</sub> = t<sub>i</sub> - t<sub>1</sub>
-     *   y<sub>i</sub> = &int; f<sup>2</sup> from t<sub>1</sub> to t<sub>i</sub>
-     *   z<sub>i</sub> = &int; f'<sup>2</sup> from t<sub>1</sub> to t<sub>i</sub>
-     *   update the sums &sum;x<sub>i</sub>x<sub>i</sub>, &sum;y<sub>i</sub>y<sub>i</sub>, &sum;x<sub>i</sub>y<sub>i</sub>, &sum;x<sub>i</sub>z<sub>i</sub> and &sum;y<sub>i</sub>z<sub>i</sub>
-     * end for
-     *
-     *            |--------------------------
-     *         \  | &sum;y<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>z<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;y<sub>i</sub>z<sub>i</sub>
-     * a     =  \ | ------------------------
-     *           \| &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>z<sub>i</sub> - &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>z<sub>i</sub>
-     *
-     *
-     *            |--------------------------
-     *         \  | &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>z<sub>i</sub> - &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>z<sub>i</sub>
-     * &omega;     =  \ | ------------------------
-     *           \| &sum;x<sub>i</sub>x<sub>i</sub> &sum;y<sub>i</sub>y<sub>i</sub> - &sum;x<sub>i</sub>y<sub>i</sub> &sum;x<sub>i</sub>y<sub>i</sub>
-     *
-     * </pre>
-     * </p>
-     *
-     * <p>Once we know &omega;, we can compute:
-     * <pre>
-     *    fc = &omega; f (t) cos (&omega; t) - f' (t) sin (&omega; t)
-     *    fs = &omega; f (t) sin (&omega; t) + f' (t) cos (&omega; t)
-     * </pre>
-     * </p>
-     *
-     * <p>It appears that <code>fc = a &omega; cos (&phi;)</code> and
-     * <code>fs = -a &omega; sin (&phi;)</code>, so we can use these
-     * expressions to compute &phi;. The best estimate over the sample is
+     * <p>It appears that \(fc = a \omega \cos(\phi)\) and
+     * \(fs = -a \omega \sin(\phi)\), so we can use these
+     * expressions to compute \(\phi\). The best estimate over the sample is
      * given by averaging these expressions.
      * </p>
      *
      * <p>Since integrals and means are involved in the preceding
-     * estimations, these operations run in O(n) time, where n is the
+     * estimations, these operations run in \(O(n)\) time, where \(n\) is the
      * number of measurements.</p>
      */
     public static class ParameterGuesser {
@@ -195,13 +249,14 @@ public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
          * @throws MathIllegalStateException when the guessing procedure cannot
          * produce sensible results.
          */
-        public ParameterGuesser(WeightedObservedPoint[] observations) {
-            if (observations.length < 4) {
+        public ParameterGuesser(Collection<WeightedObservedPoint> observations) {
+            if (observations.size() < 4) {
                 throw new NumberIsTooSmallException(LocalizedFormats.INSUFFICIENT_OBSERVED_POINTS_IN_SAMPLE,
-                                                    observations.length, 4, true);
+                                                    observations.size(), 4, true);
             }
 
-            final WeightedObservedPoint[] sorted = sortObservations(observations);
+            final WeightedObservedPoint[] sorted
+                = sortObservations(observations).toArray(new WeightedObservedPoint[0]);
 
             final double aOmega[] = guessAOmega(sorted);
             a = aOmega[0];
@@ -230,28 +285,29 @@ public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
          * @param unsorted Input observations.
          * @return the input observations, sorted.
          */
-        private WeightedObservedPoint[] sortObservations(WeightedObservedPoint[] unsorted) {
-            final WeightedObservedPoint[] observations = unsorted.clone();
+        private List<WeightedObservedPoint> sortObservations(Collection<WeightedObservedPoint> unsorted) {
+            final List<WeightedObservedPoint> observations = new ArrayList<WeightedObservedPoint>(unsorted);
 
             // Since the samples are almost always already sorted, this
             // method is implemented as an insertion sort that reorders the
             // elements in place. Insertion sort is very efficient in this case.
-            WeightedObservedPoint curr = observations[0];
-            for (int j = 1; j < observations.length; ++j) {
+            WeightedObservedPoint curr = observations.get(0);
+            final int len = observations.size();
+            for (int j = 1; j < len; j++) {
                 WeightedObservedPoint prec = curr;
-                curr = observations[j];
+                curr = observations.get(j);
                 if (curr.getX() < prec.getX()) {
                     // the current element should be inserted closer to the beginning
                     int i = j - 1;
-                    WeightedObservedPoint mI = observations[i];
+                    WeightedObservedPoint mI = observations.get(i);
                     while ((i >= 0) && (curr.getX() < mI.getX())) {
-                        observations[i + 1] = mI;
+                        observations.set(i + 1, mI);
                         if (i-- != 0) {
-                            mI = observations[i];
+                            mI = observations.get(i);
                         }
                     }
-                    observations[i + 1] = curr;
-                    curr = observations[j];
+                    observations.set(i + 1, curr);
+                    curr = observations.get(j);
                 }
             }
 
@@ -260,8 +316,6 @@ public class HarmonicFitter extends CurveFitter<HarmonicOscillator.Parametric> {
 
         /**
          * Estimate a first guess of the amplitude and angular frequency.
-         * This method assumes that the {@link #sortObservations()} method
-         * has been called previously.
          *
          * @param observations Observations, sorted w.r.t. abscissa.
          * @throws ZeroException if the abscissa range is zero.

@@ -16,24 +16,30 @@
  */
 package org.apache.commons.math3.ml.distance;
 
-import java.io.Serializable;
+import org.apache.commons.math3.util.FastMath;
 
 /**
- * Interface for distance measures of n-dimensional vectors.
+ * Calculates the Earh Mover's distance (also known as Wasserstein metric) between two distributions.
+ *
+ * @see <a href="http://en.wikipedia.org/wiki/Earth_mover's_distance">Earth Mover's distance (Wikipedia)</a>
  *
  * @version $Id$
- * @since 3.2
+ * @since 3.3
  */
-public interface DistanceMeasure extends Serializable {
+public class EarthMoversDistance implements DistanceMeasure {
 
-    /**
-     * Compute the distance between two n-dimensional vectors.
-     * <p>
-     * The two vectors are required to have the same dimension.
-     *
-     * @param a the first vector
-     * @param b the second vector
-     * @return the distance between the two vectors
-     */
-    double compute(double[] a, double[] b);
+    /** Serializable version identifier. */
+    private static final long serialVersionUID = -5406732779747414922L;
+
+    /** {@inheritDoc} */
+    public double compute(double[] a, double[] b) {
+        double lastDistance = 0;
+        double totalDistance = 0;
+        for (int i = 0; i < a.length; i++) {
+            final double currentDistance = (a[i] + lastDistance) - b[i];
+            totalDistance += FastMath.abs(currentDistance);
+            lastDistance = currentDistance;
+        }
+        return totalDistance;
+    }
 }
