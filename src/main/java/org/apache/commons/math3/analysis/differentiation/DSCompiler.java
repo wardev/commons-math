@@ -26,7 +26,7 @@ import org.apache.commons.math3.exception.MathArithmeticException;
 import org.apache.commons.math3.exception.MathInternalError;
 import org.apache.commons.math3.exception.NotPositiveException;
 import org.apache.commons.math3.exception.NumberIsTooLargeException;
-import org.apache.commons.math3.util.ArithmeticUtils;
+import org.apache.commons.math3.util.CombinatoricsUtils;
 import org.apache.commons.math3.util.FastMath;
 import org.apache.commons.math3.util.MathArrays;
 
@@ -361,7 +361,7 @@ public class DSCompiler {
 
         for (int i = 0; i < dSize; ++i) {
             final int[][] dRow = derivativeCompiler.multIndirection[i];
-            List<int[]> row = new ArrayList<int[]>();
+            List<int[]> row = new ArrayList<int[]>(dRow.length * 2);
             for (int j = 0; j < dRow.length; ++j) {
                 row.add(new int[] { dRow[j][0], lowerIndirection[dRow[j][1]], vSize + dRow[j][2] });
                 row.add(new int[] { dRow[j][0], vSize + dRow[j][1], lowerIndirection[dRow[j][2]] });
@@ -832,6 +832,48 @@ public class DSCompiler {
         for (int i = 1; i < getSize(); ++i) {
             result[resultOffset + i] = lhs[lhsOffset + i] - k * rhs[rhsOffset + i];
         }
+
+    }
+
+    /** Compute power of a double to a derivative structure.
+     * @param a number to exponentiate
+     * @param operand array holding the power
+     * @param operandOffset offset of the power in its array
+     * @param result array where result must be stored (for
+     * power the result array <em>cannot</em> be the input
+     * array)
+     * @param resultOffset offset of the result in its array
+     * @since 3.3
+     */
+    public void pow(final double a,
+                    final double[] operand, final int operandOffset,
+                    final double[] result, final int resultOffset) {
+
+        // create the function value and derivatives
+        // [a^x, ln(a) a^x, ln(a)^2 a^x,, ln(a)^3 a^x, ... ]
+        final double[] function = new double[1 + order];
+        if (a == 0) {
+            if (operand[operandOffset] == 0) {
+                function[0] = 1;
+                double infinity = Double.POSITIVE_INFINITY;
+                for (int i = 1; i < function.length; ++i) {
+                    infinity = -infinity;
+                    function[i] = infinity;
+                }
+            } else if (operand[operandOffset] < 0) {
+                Arrays.fill(function, Double.NaN);
+            }
+        } else {
+            function[0] = FastMath.pow(a, operand[operandOffset]);
+            final double lnA = FastMath.log(a);
+            for (int i = 1; i < function.length; ++i) {
+                function[i] = lnA * function[i - 1];
+            }
+        }
+
+
+        // apply function composition
+        compose(operand, operandOffset, function, result, resultOffset);
 
     }
 
@@ -1752,7 +1794,7 @@ public class DSCompiler {
                 if (orders[k] > 0) {
                     try {
                         term *= FastMath.pow(delta[k], orders[k]) /
-                                ArithmeticUtils.factorial(orders[k]);
+                        CombinatoricsUtils.factorial(orders[k]);
                     } catch (NotPositiveException e) {
                         // this cannot happen
                         throw new MathInternalError(e);

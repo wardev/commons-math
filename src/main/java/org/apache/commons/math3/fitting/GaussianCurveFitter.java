@@ -16,109 +16,168 @@
  */
 package org.apache.commons.math3.fitting;
 
-import java.util.Arrays;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collection;
+import java.util.Collections;
 import org.apache.commons.math3.analysis.function.Gaussian;
+import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.exception.NullArgumentException;
 import org.apache.commons.math3.exception.NumberIsTooSmallException;
 import org.apache.commons.math3.exception.OutOfRangeException;
 import org.apache.commons.math3.exception.ZeroException;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.exception.util.LocalizedFormats;
-import org.apache.commons.math3.optim.nonlinear.vector.MultivariateVectorOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.WithStartPoint;
+import org.apache.commons.math3.fitting.leastsquares.WithMaxIterations;
 import org.apache.commons.math3.util.FastMath;
 
 /**
  * Fits points to a {@link
- * org.apache.commons.math3.analysis.function.Gaussian.Parametric Gaussian} function.
+ * org.apache.commons.math3.analysis.function.Gaussian.Parametric Gaussian}
+ * function.
+ * <br/>
+ * The {@link #withStartPoint(double[]) initial guess values} must be passed
+ * in the following order:
+ * <ul>
+ *  <li>Normalization</li>
+ *  <li>Mean</li>
+ *  <li>Sigma</li>
+ * </ul>
+ * The optimal values will be returned in the same order.
+ *
  * <p>
  * Usage example:
  * <pre>
- *   GaussianFitter fitter = new GaussianFitter(
- *     new LevenbergMarquardtOptimizer());
- *   fitter.addObservedPoint(4.0254623,  531026.0);
- *   fitter.addObservedPoint(4.03128248, 984167.0);
- *   fitter.addObservedPoint(4.03839603, 1887233.0);
- *   fitter.addObservedPoint(4.04421621, 2687152.0);
- *   fitter.addObservedPoint(4.05132976, 3461228.0);
- *   fitter.addObservedPoint(4.05326982, 3580526.0);
- *   fitter.addObservedPoint(4.05779662, 3439750.0);
- *   fitter.addObservedPoint(4.0636168,  2877648.0);
- *   fitter.addObservedPoint(4.06943698, 2175960.0);
- *   fitter.addObservedPoint(4.07525716, 1447024.0);
- *   fitter.addObservedPoint(4.08237071, 717104.0);
- *   fitter.addObservedPoint(4.08366408, 620014.0);
- *   double[] parameters = fitter.fit();
+ *   WeightedObservedPoints obs = new WeightedObservedPoints();
+ *   obs.add(4.0254623,  531026.0);
+ *   obs.add(4.03128248, 984167.0);
+ *   obs.add(4.03839603, 1887233.0);
+ *   obs.add(4.04421621, 2687152.0);
+ *   obs.add(4.05132976, 3461228.0);
+ *   obs.add(4.05326982, 3580526.0);
+ *   obs.add(4.05779662, 3439750.0);
+ *   obs.add(4.0636168,  2877648.0);
+ *   obs.add(4.06943698, 2175960.0);
+ *   obs.add(4.07525716, 1447024.0);
+ *   obs.add(4.08237071, 717104.0);
+ *   obs.add(4.08366408, 620014.0);
+ *   double[] parameters = GaussianCurveFitter.create().fit(obs);
  * </pre>
  *
- * @since 2.2
- * @version $Id: GaussianFitter.java 1416643 2012-12-03 19:37:14Z tn $
- * @deprecated As of 3.3. Please use {@link GaussianCurveFitter} and
- * {@link WeightedObservedPoints} instead.
+ * @version $Id$
+ * @since 3.3
  */
-@Deprecated
-public class GaussianFitter extends CurveFitter<Gaussian.Parametric> {
+public class GaussianCurveFitter extends AbstractCurveFitter<LevenbergMarquardtOptimizer>
+    implements WithStartPoint<GaussianCurveFitter>,
+               WithMaxIterations<GaussianCurveFitter> {
+    /** Parametric function to be fitted. */
+    private static final Gaussian.Parametric FUNCTION = new Gaussian.Parametric() {
+            @Override
+            public double value(double x, double ... p) {
+                double v = Double.POSITIVE_INFINITY;
+                try {
+                    v = super.value(x, p);
+                } catch (NotStrictlyPositiveException e) { // NOPMD
+                    // Do nothing.
+                }
+                return v;
+            }
+
+            @Override
+            public double[] gradient(double x, double ... p) {
+                double[] v = { Double.POSITIVE_INFINITY,
+                               Double.POSITIVE_INFINITY,
+                               Double.POSITIVE_INFINITY };
+                try {
+                    v = super.gradient(x, p);
+                } catch (NotStrictlyPositiveException e) { // NOPMD
+                    // Do nothing.
+                }
+                return v;
+            }
+        };
+    /** Initial guess. */
+    private final double[] initialGuess;
+    /** Maximum number of iterations of the optimization algorithm. */
+    private final int maxIter;
+
     /**
-     * Constructs an instance using the specified optimizer.
+     * Contructor used by the factory methods.
      *
-     * @param optimizer Optimizer to use for the fitting.
+     * @param initialGuess Initial guess. If set to {@code null}, the initial guess
+     * will be estimated using the {@link ParameterGuesser}.
+     * @param maxIter Maximum number of iterations of the optimization algorithm.
      */
-    public GaussianFitter(MultivariateVectorOptimizer optimizer) {
-        super(optimizer);
+    private GaussianCurveFitter(double[] initialGuess,
+                                int maxIter) {
+        this.initialGuess = initialGuess;
+        this.maxIter = maxIter;
     }
 
     /**
-     * Fits a Gaussian function to the observed points.
+     * Creates a default curve fitter.
+     * The initial guess for the parameters will be {@link ParameterGuesser}
+     * computed automatically, and the maximum number of iterations of the
+     * optimization algorithm is set to {@link Integer#MAX_VALUE}.
      *
-     * @param initialGuess First guess values in the following order:
-     * <ul>
-     *  <li>Norm</li>
-     *  <li>Mean</li>
-     *  <li>Sigma</li>
-     * </ul>
-     * @return the parameters of the Gaussian function that best fits the
-     * observed points (in the same order as above).
-     * @since 3.0
+     * @return a curve fitter.
+     *
+     * @see #withStartPoint(double[])
+     * @see #withMaxIterations(int)
      */
-    public double[] fit(double[] initialGuess) {
-        final Gaussian.Parametric f = new Gaussian.Parametric() {
-                @Override
-                public double value(double x, double ... p) {
-                    double v = Double.POSITIVE_INFINITY;
-                    try {
-                        v = super.value(x, p);
-                    } catch (NotStrictlyPositiveException e) { // NOPMD
-                        // Do nothing.
-                    }
-                    return v;
-                }
-
-                @Override
-                public double[] gradient(double x, double ... p) {
-                    double[] v = { Double.POSITIVE_INFINITY,
-                                   Double.POSITIVE_INFINITY,
-                                   Double.POSITIVE_INFINITY };
-                    try {
-                        v = super.gradient(x, p);
-                    } catch (NotStrictlyPositiveException e) { // NOPMD
-                        // Do nothing.
-                    }
-                    return v;
-                }
-            };
-
-        return fit(f, initialGuess);
+    public static GaussianCurveFitter create() {
+        return new GaussianCurveFitter(null, Integer.MAX_VALUE);
     }
 
-    /**
-     * Fits a Gaussian function to the observed points.
-     *
-     * @return the parameters of the Gaussian function that best fits the
-     * observed points (in the same order as above).
-     */
-    public double[] fit() {
-        final double[] guess = (new ParameterGuesser(getObservations())).guess();
-        return fit(guess);
+    /** {@inheritDoc} */
+    public GaussianCurveFitter withStartPoint(double[] start) {
+        return new GaussianCurveFitter(start.clone(),
+                                       maxIter);
+    }
+
+    /** {@inheritDoc} */
+    public GaussianCurveFitter withMaxIterations(int max) {
+        return new GaussianCurveFitter(initialGuess,
+                                       max);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    protected LevenbergMarquardtOptimizer getOptimizer(Collection<WeightedObservedPoint> observations) {
+        // Prepare least-squares problem.
+        final int len = observations.size();
+        final double[] target  = new double[len];
+        final double[] weights = new double[len];
+
+        int i = 0;
+        for (WeightedObservedPoint obs : observations) {
+            target[i]  = obs.getY();
+            weights[i] = obs.getWeight();
+            ++i;
+        }
+
+        final AbstractCurveFitter.TheoreticalValuesFunction model
+            = new AbstractCurveFitter.TheoreticalValuesFunction(FUNCTION,
+                                                                observations);
+
+        final double[] startPoint = initialGuess != null ?
+            initialGuess :
+            // Compute estimation.
+            new ParameterGuesser(observations).guess();
+
+        // Return a new optimizer set up to fit a Gaussian curve to the
+        // observed points.
+        return LevenbergMarquardtOptimizer.create()
+            .withMaxEvaluations(Integer.MAX_VALUE)
+            .withMaxIterations(maxIter)
+            .withStartPoint(startPoint)
+            .withTarget(target)
+            .withWeight(new DiagonalMatrix(weights))
+            .withModelAndJacobian(model.getModelFunction(),
+                                  model.getModelFunctionJacobian());
     }
 
     /**
@@ -144,16 +203,16 @@ public class GaussianFitter extends CurveFitter<Gaussian.Parametric> {
          * @throws NumberIsTooSmallException if there are less than 3
          * observations.
          */
-        public ParameterGuesser(WeightedObservedPoint[] observations) {
+        public ParameterGuesser(Collection<WeightedObservedPoint> observations) {
             if (observations == null) {
                 throw new NullArgumentException(LocalizedFormats.INPUT_ARRAY);
             }
-            if (observations.length < 3) {
-                throw new NumberIsTooSmallException(observations.length, 3, true);
+            if (observations.size() < 3) {
+                throw new NumberIsTooSmallException(observations.size(), 3, true);
             }
 
-            final WeightedObservedPoint[] sorted = sortObservations(observations);
-            final double[] params = basicGuess(sorted);
+            final List<WeightedObservedPoint> sorted = sortObservations(observations);
+            final double[] params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]));
 
             norm = params[0];
             mean = params[1];
@@ -180,10 +239,10 @@ public class GaussianFitter extends CurveFitter<Gaussian.Parametric> {
          * @param unsorted Input observations.
          * @return the input observations, sorted.
          */
-        private WeightedObservedPoint[] sortObservations(WeightedObservedPoint[] unsorted) {
-            final WeightedObservedPoint[] observations = unsorted.clone();
-            final Comparator<WeightedObservedPoint> cmp
-                = new Comparator<WeightedObservedPoint>() {
+        private List<WeightedObservedPoint> sortObservations(Collection<WeightedObservedPoint> unsorted) {
+            final List<WeightedObservedPoint> observations = new ArrayList<WeightedObservedPoint>(unsorted);
+
+            final Comparator<WeightedObservedPoint> cmp = new Comparator<WeightedObservedPoint>() {
                 public int compare(WeightedObservedPoint p1,
                                    WeightedObservedPoint p2) {
                     if (p1 == null && p2 == null) {
@@ -217,7 +276,7 @@ public class GaussianFitter extends CurveFitter<Gaussian.Parametric> {
                 }
             };
 
-            Arrays.sort(observations, cmp);
+            Collections.sort(observations, cmp);
             return observations;
         }
 

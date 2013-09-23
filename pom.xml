@@ -321,7 +321,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.10</version>
+      <version>4.11</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -353,6 +353,8 @@
     <math.pmd.version>2.7.1</math.pmd.version>
     <math.findbugs.version>2.5.1</math.findbugs.version>
     <math.checkstyle.version>2.9.1</math.checkstyle.version>
+    <!-- Temporary downdate: 0.6.3 uses different tags and CP32 was not updated -->
+    <commons.jacoco.version>0.6.2.201302030002</commons.jacoco.version>
   </properties> 
 
   <build>
@@ -378,6 +380,8 @@
               <descriptor>src/main/assembly/src.xml</descriptor>
               <descriptor>src/main/assembly/bin.xml</descriptor>
             </descriptors>
+            <!-- There are a lot of long file names. Suppress the warnings. -->
+            <tarLongFileMode>gnu</tarLongFileMode>
           </configuration>
         </plugin>
         <plugin>
